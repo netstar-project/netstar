@@ -127,4 +127,62 @@ forwarder() {
 }
 ```
 
-Here, 
+Here, hook point 0 will send TCP packets to the `_tcp_forward` async-flow manager. hook point 1 will receive TCP packets from the `_tcp_forward` async-flow manager.
+
+In this way, the `_tcp_forward` async-flow manager forwards TCP packets between hook point 0 and hook point 1. Remember that hook point 0 is associated with port 0 and hook point 1 is associated with port 1 (step 4 of this tutorial). This means that the `tcp_forward` processes TCP packets between port 0 and port 1.
+
+11. Line 71-89 implements the core processing logic of the packet forwarder. It is repeated using the `repeat` function call in line 70, so that it is called for each new flow.
+```cpp
+return _udp_forward.on_new_initial_context().then([this]() mutable {
+        auto ic = _udp_forward.get_initial_context();
+
+        do_with(ic.get_sd_async_flow(), [](sd_async_flow<udp_ppr>& ac){
+            ac.register_events(udp_events::pkt_in);
+            return ac.run_async_loop([&ac](){
+                // printf("client async loop runs!\n");
+                if(ac.cur_event().on_close_event()) {
+                    return make_ready_future<af_action>(af_action::close_forward);
+                }
+                return make_ready_future<af_action>(af_action::forward);
+            });
+        }).then([](){
+            // printf("client async flow is closed.\n");
+        });
+
+        return stop_iteration::no;
+    });
+});
+```
+
+
+12. In line 71, when a new flow arrives, a flow context is constructed. The continuation function defined in that line will be called to process the flow context.
+```cpp
+return _udp_forward.on_new_initial_context().then([this]() mutable {
+    ...
+});
+```
+
+13. In line 72, the flow context is retrieved, and an async-flow object is obtained from the flow context using `ic.get_sd_async_flow()`, and a continuation function is defined in line 74 to initialize the flow context.
+```cpp
+auto ic = _udp_forward.get_initial_context();
+
+do_with(ic.get_sd_async_flow(), [](sd_async_flow<udp_ppr>& ac){
+    ...
+})
+```
+
+14. We only register a `udp_events::pkt_in` for the async-flow object, so that it only processes newly received udp packets. A continuation function is defined on line 76, which is invoked on by each newly received udp packet.
+```cpp
+ac.register_events(udp_events::pkt_in);
+return ac.run_async_loop([&ac](){
+    ...
+});
+```
+
+15. After a packet is received, it is directly forwarded to another port (line 81).
+```cpp
+[&ac](){
+    ...
+    return make_ready_future<af_action>(af_action::forward);
+}
+```
