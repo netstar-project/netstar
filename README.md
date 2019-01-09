@@ -61,6 +61,31 @@ We give a tutorial based on a simple packet forwarder implemented using netstar.
 
 1. The `simple_forwarder.cc` implements a simple packet forwarder, which receives the packet from one port, and send the packet out from another port.
 
-2. Initialize the basic sestar runtime system. This is done with line 132 `return app.run_deprecated(ac, av, [&app] {`.
+2. Initialize the basic seastar runtime system. This is done with line 132 `return app.run_deprecated(ac, av, [&app] {`.
 
-3. 
+3. Use the port_manager to add two ports for sending and receiving packets.
+```cpp
+port_manager::get().add_port(opts, 0, port_type::standard).then([&opts]{
+    return port_manager::get().add_port(opts, 1, port_type::standard);
+})
+```
+Line 159-161 add two ports. Port 0 (the first added port) is used to receive packets. Port 1 (the second added port) is used to send packets.
+
+4. Add two hookpoints to each port with 161-165.
+```cpp
+.then([]{
+    return hook_manager::get().add_hook_point(hook_type::sd_async_flow, 0);
+}).then([]{
+    return hook_manager::get().add_hook_point(hook_type::sd_async_flow, 1);
+})
+```
+
+5. Start the forwarder in line 166.
+```cpp
+.then([]{
+    return forwarders.start();
+})
+```
+The definition of the forwarders is in line 42-43. forwarders is a special template class `distributed<forwarder>`. The `distributed` is a utility provided seastar, which is used to create one instance of the `forwarder` class on each of the program thread.
+
+By default, after initialization.
