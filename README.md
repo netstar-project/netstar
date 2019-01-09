@@ -186,3 +186,65 @@ return ac.run_async_loop([&ac](){
     return make_ready_future<af_action>(af_action::forward);
 }
 ```
+
+Perform Asynchronous Operations
+--------------------------------
+
+Arbitrary asynchronous operations can be performed in continuation function that we mentioned in step 14 of the previous section.
+```cpp
+ac.register_events(udp_events::pkt_in);
+return ac.run_async_loop([&ac](){
+    // Arbitrary asynchronous operations can be performed here.
+});
+```
+
+In `/tests/netstar/playground.cc`, an example program is given, which reads from the mica database once for each receive network packet.
+
+In line 135 of `playground.cc`, a continuation function is defined for the async-flow object to handle the received packet.
+
+In line 143 of `playground.cc`, a read request to mica database is generated.
+```cpp
+return this->_mc.query(Operation::kGet, sizeof(src_ip), key_buf.get_temp_buffer(),
+                       0, temporary_buffer<char>())
+```
+
+In line 225-240, the response of the query is handled using the following code:
+```cpp
+.then_wrapped([&ac, this](auto&& f){
+    try{
+        f.get();
+        return af_action::forward;
+
+    }
+    catch(...){
+        if(this->_mc.nr_request_descriptors() == 0){
+            this->_insufficient_mica_rd_erorr += 1;
+        }
+        else{
+            this->_mica_timeout_error += 1;
+        }
+        return af_action::drop;
+    }
+});
+```
+
+More asynchronous operations can be added to the continuation function in similar way.
+
+More Examples
+--------------
+
+Besides the `simple_forwarder.cc` and `playground.cc`, there are other examples in the `tests/netstar/` folder. The following describes their functionalities.
+
+`https_ids.cc`: It extracts payload from HTTP request and uses `aho-corasick` algorithms for intrusion detection.
+
+`http_request_extraction.cc`: It extracts payload from the HTTP requests.
+
+`microbench_dbrw.cc`: A benchmark program for reading from and writing to a remote mica database.
+
+`tcp_payload_extraction.cc`: It extracts TCP payload from TCP connections.
+
+`tcp_sctp_server.cc`: A test program which accepts TCP connections and echos the received payload.
+
+`two_stack.cc`: In this program, two user-space TCP/IP stacks are created, for different IP addresses.
+
+`with_multiple_hookpoints.cc`: A test program for defining multiple hook points.
